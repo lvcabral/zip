@@ -37,7 +37,7 @@ export enum AttributeCompat {
 @struct()
 export class LocalFileHeader {
 	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data);
+		deserialize(this, data as ArrayBuffer);
 		if (this.signature !== 0x04034b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
 		}
@@ -122,7 +122,7 @@ export class LocalFileHeader {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): ArrayBuffer {
+	public get extra(): ArrayBufferLike {
 		const start = 30 + this.nameLength;
 		return this.data.slice(start, start + this.extraLength);
 	}
@@ -147,7 +147,7 @@ export class ExtraDataRecord {
 	@t.uint32 public length!: number;
 
 	public constructor(public readonly data: ArrayBufferLike) {
-		deserialize(this, data);
+		deserialize(this, data as ArrayBuffer);
 		if (this.signature != 0x08064b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid archive extra data record signature: ' + this.signature);
 		}
@@ -157,7 +157,7 @@ export class ExtraDataRecord {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extraField(): ArrayBuffer {
+	public get extraField(): ArrayBufferLike {
 		return this.data.slice(8, 8 + this.length);
 	}
 }
@@ -179,7 +179,7 @@ export class FileEntry {
 		protected zipData: ArrayBufferLike,
 		protected _data: ArrayBufferLike
 	) {
-		deserialize(this, _data);
+		deserialize(this, _data as ArrayBuffer);
 		// Sanity check.
 		if (this.signature != 0x02014b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Central directory record has invalid signature: ' + this.signature);
@@ -327,7 +327,7 @@ export class FileEntry {
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): ArrayBuffer {
+	public get extra(): ArrayBufferLike {
 		const offset = 44 + this.nameLength;
 		return this._data.slice(offset, offset + this.extraLength);
 	}
@@ -399,7 +399,7 @@ export class FileEntry {
 @struct()
 export class DigitalSignature {
 	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data);
+		deserialize(this, data as ArrayBuffer);
 		if (this.signature != 0x05054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid digital signature signature: ' + this.signature);
 		}
@@ -409,7 +409,7 @@ export class DigitalSignature {
 
 	@t.uint16 public size!: number;
 
-	public get signatureData(): ArrayBuffer {
+	public get signatureData(): ArrayBufferLike {
 		return this.data.slice(6, 6 + this.size);
 	}
 }
@@ -423,7 +423,7 @@ export class DigitalSignature {
 @struct()
 export class Header {
 	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data);
+		deserialize(this, data as ArrayBuffer);
 		if (this.signature != 0x06054b50) {
 			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));
 		}
