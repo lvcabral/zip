@@ -1,6 +1,6 @@
 {
 	"name": "@lvcabral/zip",
-	"version": "1.3.2",
+	"version": "1.3.3",
 	"description": "Zip backend for ZenFS (with case fold mode option)",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
