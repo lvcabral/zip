@@ -1,39 +1,63 @@
-# ZenFS Zip Backend (with Case Sensitive Mode option)
+# ZenFS Archive Backends
 
-[ZenFS](https://github.com/zen-fs/core) backend for Zip files.
+[ZenFS](https://github.com/zen-fs/core) backends for archive files.
 
-Please read the ZenFS documentation!
+This packages adds a few backends:
 
-## Backend
+- `Zip` allows you to create a _readonly_ file system from a zip file.
+- `Iso` allows you to create a _readonly_ file system from a `.iso` file.
 
-This package adds the `Zip` backend, which allows you to create a _readonly_ file system from a zip file.
-For more information, see the [API documentation](https://zen-fs.github.io/zip).
+For more information, see the [API documentation](https://zenfs.dev/archives).
 
-### Fork Information
+Please read the ZenFS core documentation!
 
-This fork adds a new option to enable/disable the Case Sensitive mode.
+## Installation
+
+> [!IMPORTANT]
+> This project is licensed under the LGPL (v3+).
+
+```sh
+npm install @zenfs/archives
+```
 
 ## Usage
 
-> [!NOTE]
-> The examples are written in ESM.
-> For CJS, you can `require` the package.
-> If using a browser environment, you can use a `<script>` with `type=module` (you may need to use import maps)
+The easiest way to get started is by looking at these examples
 
-You can't use `Zip` on its own. You must import the core in order to use the backend.
+#### `Zip`
 
 ```js
 import { configure, fs } from '@zenfs/core';
-import { Zip } from '@zenfs/zip';
+import { Zip } from '@zenfs/archives';
 
 const res = await fetch('http://example.com/archive.zip');
 
 await configure({
 	mounts: {
-		'/mnt/zip': { backend: Zip, data: await res.arrayBuffer(), caseSensitive: false },
+		'/mnt/zip': { backend: Zip, data: await res.arrayBuffer() },
 	},
 });
 
 const contents = fs.readFileSync('/mnt/zip/in-archive.txt', 'utf-8');
 console.log(contents);
 ```
+
+#### `Iso`
+
+```js
+import { configure, fs } from '@zenfs/core';
+import { Iso } from '@zenfs/archives';
+
+const res = await fetch('http://example.com/image.iso');
+
+await configure({
+	mounts: {
+		'/mnt/iso': { backend: Iso, data: new Uint8Array(await res.arrayBuffer()) },
+	},
+});
+
+const contents = fs.readFileSync('/mnt/iso/in-image.txt', 'utf-8');
+console.log(contents);
+```
+
+The `Iso` implementation uses information from [the OS Dev Wiki](https://wiki.osdev.org/ISO_9660) and [ECMA 119](https://www.ecma-international.org/wp-content/uploads/ECMA-119_4th_edition_june_2019.pdf).

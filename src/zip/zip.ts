@@ -1,8 +1,9 @@
-import { S_IFDIR, S_IFREG } from '@zenfs/core/emulation/constants.js';
-import { Errno, ErrnoError } from '@zenfs/core/error.js';
-import { Stats } from '@zenfs/core/stats.js';
-import { deserialize, sizeof, struct, types as t } from 'utilium';
+// SPDX-License-Identifier: LGPL-3.0-or-later
+import { log, withErrno } from 'kerium';
+import { sizeof } from 'memium';
+import { $from, struct, types as t } from 'memium/decorators';
 import { CompressionMethod, decompressionMethods } from './compression.js';
+import type { ZipDataSource } from './fs.js';
 import { msdosDate, safeDecode } from './utils.js';
 
 /**
@@ -34,38 +35,39 @@ export enum AttributeCompat {
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-@struct()
-export class LocalFileHeader {
-	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data as ArrayBuffer);
+@struct.packed('LocalFileHeader')
+export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	_source!: ZipDataSource<TBuffer>;
+
+	@t.uint32 public accessor signature!: number;
+
+	public check() {
 		if (this.signature !== 0x04034b50) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
+			throw withErrno('EINVAL', 'Invalid Zip file: Local file header has invalid signature: ' + this.signature);
 		}
 	}
-
-	@t.uint32 public signature!: number;
 
 	/**
 	 * The minimum supported ZIP specification version needed to extract the file.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.3
 	 */
-	@t.uint16 public versionNeeded!: number;
+	@t.uint16 public accessor versionNeeded!: number;
 
 	/**
 	 * General purpose bit flags
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.4
 	 */
-	@t.uint16 public flags!: number;
+	@t.uint16 public accessor flags!: number;
 
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5
 	 */
-	@t.uint16 public compressionMethod!: CompressionMethod;
+	@t.uint16 public accessor compressionMethod!: CompressionMethod;
 
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
 	 */
-	@t.uint32 protected datetime!: number;
+	@t.uint32 protected accessor datetime!: number;
 
 	/**
 	 * The date and time are encoded in standard MS-DOS format.
@@ -79,7 +81,7 @@ export class LocalFileHeader {
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.7
 	 */
-	@t.uint32 public crc32!: number;
+	@t.uint32 public accessor crc32!: number;
 
 	/**
 	 * The size of the file compressed.
@@ -87,7 +89,7 @@ export class LocalFileHeader {
 	 * central directory's entry is used
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.8
 	 */
-	@t.uint32 public compressedSize!: number;
+	@t.uint32 public accessor compressedSize!: number;
 
 	/**
 	 * The size of the file uncompressed
@@ -95,44 +97,51 @@ export class LocalFileHeader {
 	 * central directory's entry is used
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.9
 	 */
-	@t.uint32 public uncompressedSize!: number;
+	@t.uint32 public accessor uncompressedSize!: number;
 
 	/**
 	 * The length of the file name
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.10
 	 */
-	@t.uint16 public nameLength!: number;
+	@t.uint16 public accessor nameLength!: number;
 
 	/**
 	 * The length of the extra field
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.11
 	 */
-	@t.uint16 public extraLength!: number;
+	@t.uint16 public accessor extraLength!: number;
 
 	/**
 	 * The name of the file, with optional relative path.
 	 * @see CentralDirectory.fileName
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	public get name(): string {
-		return safeDecode(this.data, this.useUTF8, 30, this.nameLength);
-	}
+	name!: string;
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): ArrayBufferLike {
-		const start = 30 + this.nameLength;
-		return this.data.slice(start, start + this.extraLength);
-	}
+	extra!: Uint8Array;
 
 	public get size(): number {
-		return 30 + this.nameLength + this.extraLength;
+		return LocalFileHeader.size + this.nameLength + this.extraLength;
 	}
 
 	public get useUTF8(): boolean {
 		return !!(this.flags & (1 << 11));
+	}
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<LocalFileHeader<TBuffer>> {
+		const entryData = await source.get(offset, LocalFileHeader.size);
+		const cd = new LocalFileHeader<TBuffer>(entryData.buffer, entryData.byteOffset);
+		cd._source = source;
+		offset += LocalFileHeader.size;
+		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		offset += cd.nameLength;
+		cd.extra = await source.get(offset, cd.extraLength);
+		offset += cd.extraLength;
+		return cd;
 	}
 }
 
@@ -140,56 +149,54 @@ export class LocalFileHeader {
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-@struct()
-export class ExtraDataRecord {
-	@t.uint32 public signature!: number;
+@struct.packed('ExtraDataRecord')
+export class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
 
-	@t.uint32 public length!: number;
+	@t.uint32 public accessor signature!: number;
 
-	public constructor(public readonly data: ArrayBufferLike) {
-		deserialize(this, data as ArrayBuffer);
+	public check() {
 		if (this.signature != 0x08064b50) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid archive extra data record signature: ' + this.signature);
+			throw withErrno('EINVAL', 'Invalid archive extra data record signature: ' + this.signature);
 		}
 	}
+
+	@t.uint32 public accessor length!: number;
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extraField(): ArrayBufferLike {
-		return this.data.slice(8, 8 + this.length);
+	public extraField!: Uint8Array;
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<ExtraDataRecord<TBuffer>> {
+		const entryData = await source.get(offset, ExtraDataRecord.size);
+		const record = new ExtraDataRecord<TBuffer>(entryData.buffer, entryData.byteOffset);
+		record._source = source;
+		offset += ExtraDataRecord.size;
+		record.extraField = await source.get(offset, record.length);
+		return record;
 	}
 }
 
 /**
- * @hidden
- * Inlined for performance
- */
-export const sizeof_FileEntry = 46;
-
-/**
- * Refered to as a "central directory" record in the spec.
+ * Referred to as a "central directory" record in the spec.
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-@struct()
-export class FileEntry {
-	public constructor(
-		protected zipData: ArrayBufferLike,
-		protected _data: ArrayBufferLike
-	) {
-		deserialize(this, _data as ArrayBuffer);
-		// Sanity check.
+@struct.packed('FileEntry')
+export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
+	@t.uint32 public accessor signature!: number;
+
+	public check() {
 		if (this.signature != 0x02014b50) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: Central directory record has invalid signature: ' + this.signature);
+			throw withErrno('EINVAL', 'Invalid Zip file: Central directory record has invalid signature: ' + this.signature);
 		}
-
-		this.name = safeDecode(this._data, this.useUTF8, sizeof_FileEntry, this.nameLength).replace(/\\/g, '/');
-		this.comment = safeDecode(this._data, this.useUTF8, sizeof_FileEntry + this.nameLength + this.extraLength, this.commentLength);
 	}
-
-	@t.uint32 public signature!: number;
 
 	/**
 	 * The lower byte of "version made by", indicates the ZIP specification version supported by the software used to encode the file.
@@ -197,25 +204,25 @@ export class FileEntry {
 	 * minor — `zipVersion` mod 10
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2
 	 */
-	@t.uint8 public zipVersion!: number;
+	@t.uint8 public accessor zipVersion!: number;
 
 	/**
 	 * The upper byte of "version made by", indicates the compatibility of the file attribute information.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2
 	 */
-	@t.uint8 public attributeCompat!: AttributeCompat;
+	@t.uint8 public accessor attributeCompat!: AttributeCompat;
 
 	/**
 	 * The minimum supported ZIP specification version needed to extract the file.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.3
 	 */
-	@t.uint16 public versionNeeded!: number;
+	@t.uint16 public accessor versionNeeded!: number;
 
 	/**
 	 * General purpose bit flags
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.4
 	 */
-	@t.uint16 public flag!: number;
+	@t.uint16 public accessor flag!: number;
 
 	public get useUTF8(): boolean {
 		return !!(this.flag & (1 << 11));
@@ -228,12 +235,12 @@ export class FileEntry {
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5
 	 */
-	@t.uint16 public compressionMethod!: CompressionMethod;
+	@t.uint16 public accessor compressionMethod!: CompressionMethod;
 
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
 	 */
-	@t.uint32 protected datetime!: number;
+	@t.uint32 protected accessor datetime!: number;
 
 	/**
 	 * The date and time are encoded in standard MS-DOS format.
@@ -247,48 +254,48 @@ export class FileEntry {
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.7
 	 */
-	@t.uint32 public crc32!: number;
+	@t.uint32 public accessor crc32!: number;
 
 	/**
 	 * The size of the file compressed
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.8
 	 */
-	@t.uint32 public compressedSize!: number;
+	@t.uint32 public accessor compressedSize!: number;
 
 	/**
 	 * The size of the file uncompressed
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.9
 	 */
-	@t.uint32 public uncompressedSize!: number;
+	@t.uint32 public accessor uncompressedSize!: number;
 
 	/**
 	 * The length of the file name
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.10
 	 */
-	@t.uint16 public nameLength!: number;
+	@t.uint16 public accessor nameLength!: number;
 
 	/**
 	 * The length of the extra field
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.11
 	 */
-	@t.uint16 public extraLength!: number;
+	@t.uint16 public accessor extraLength!: number;
 
 	/**
 	 * The length of the comment
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.12
 	 */
-	@t.uint16 public commentLength!: number;
+	@t.uint16 public accessor commentLength!: number;
 
 	/**
 	 * The number of the disk on which this file begins.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.13
 	 */
-	@t.uint16 public startDisk!: number;
+	@t.uint16 public accessor startDisk!: number;
 
 	/**
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.14
 	 */
-	@t.uint16 public internalAttributes!: number;
+	@t.uint16 public accessor internalAttributes!: number;
 
 	/**
 	 * The mapping of the external attributes is host-system dependent.
@@ -297,14 +304,14 @@ export class FileEntry {
 	 * @see attributeCompat
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.15
 	 */
-	@t.uint32 public externalAttributes!: number;
+	@t.uint32 public accessor externalAttributes!: number;
 
 	/**
 	 * This is the offset from the start of the first disk on which
 	 * this file appears to where the local header should be found.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.16
 	 */
-	@t.uint32 public headerRelativeOffset!: number;
+	@t.uint32 public accessor headerRelativeOffset!: number;
 
 	/**
 	 * The name of the file, with optional relative path.
@@ -318,25 +325,22 @@ export class FileEntry {
 	 *
 	 * Unfortunately, this isn't true in practice.
 	 * Some Windows zip utilities use a backslash here, but the correct Unix-style path in file headers.
-	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '/' to '\' here.
+	 * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
 	 */
-	public readonly name: string;
+	name!: string;
 
 	/**
 	 * This should be used for storage expansion.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
 	 */
-	public get extra(): ArrayBufferLike {
-		const offset = 44 + this.nameLength;
-		return this._data.slice(offset, offset + this.extraLength);
-	}
+	extra!: Uint8Array;
 
 	/**
 	 * The comment for this file
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.18
 	 */
-	public readonly comment: string;
+	comment!: string;
 
 	/**
 	 * The total size of the this entry
@@ -356,7 +360,7 @@ export class FileEntry {
 			According to the spec, the layout of external attributes is platform-dependent.
 			If that fails, we also check if the name of the file ends in '/'.
 		*/
-		return !!(this.externalAttributes & 16) || this.name.endsWith('/');
+		return !!(this.externalAttributes & 16) || this.name.at(-1) == '/';
 	}
 
 	/**
@@ -366,29 +370,45 @@ export class FileEntry {
 		return !this.isDirectory;
 	}
 
-	/**
-	 * Gets the file data, and decompresses it if needed.
-	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
-	 */
-	public get data(): Uint8Array {
+	async loadContents(): Promise<void> {
 		// Get the local header before we can figure out where the actual compressed data starts.
-		const { compressionMethod, size, name } = new LocalFileHeader(this.zipData.slice(this.headerRelativeOffset));
-		const data = this.zipData.slice(this.headerRelativeOffset + size);
+		const rawLocalHeader = await this._source.get(this.headerRelativeOffset, sizeof(LocalFileHeader));
+		const { compressionMethod, size, name } = new LocalFileHeader(rawLocalHeader.buffer, rawLocalHeader.byteOffset);
+
+		const data = await this._source.get(this.headerRelativeOffset + size, this.compressedSize);
 		// Check the compression
 		const decompress = decompressionMethods[compressionMethod];
 		if (typeof decompress != 'function') {
 			const mname: string = compressionMethod in CompressionMethod ? CompressionMethod[compressionMethod] : compressionMethod.toString();
-			throw new ErrnoError(Errno.EINVAL, `Invalid compression method on file '${name}': ${mname}`);
+			throw withErrno('EINVAL', `Invalid compression method on file "${name}": ${mname}`);
 		}
-		return decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
+		this.contents = decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
 	}
 
-	public get stats(): Stats {
-		return new Stats({
-			mode: 0o555 | (this.isDirectory ? S_IFDIR : S_IFREG),
-			size: this.uncompressedSize,
-			mtimeMs: this.lastModified.getTime(),
-		});
+	/**
+	 * Gets the file data, and decompresses it if needed.
+	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
+	 */
+	contents!: Uint8Array;
+
+	/**
+	 * @deprecated Use `contents`
+	 */
+	public get data(): Uint8Array {
+		return this.contents;
+	}
+
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<FileEntry<TBuffer>> {
+		const entryData = await source.get(offset, FileEntry.size);
+		const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
+		cd._source = source;
+		offset += FileEntry.size;
+		cd.name = await safeDecode(source, cd.useUTF8, offset, cd.nameLength);
+		offset += cd.nameLength;
+		cd.extra = await source.get(offset, cd.extraLength);
+		offset += cd.extraLength;
+		cd.comment = await safeDecode(source, cd.useUTF8, offset, cd.commentLength);
+		return cd;
 	}
 }
 
@@ -396,88 +416,128 @@ export class FileEntry {
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-@struct()
-export class DigitalSignature {
-	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data as ArrayBuffer);
+@struct.packed('DigitalSignature')
+export class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
+	@t.uint32 public accessor signature!: number;
+
+	public check() {
 		if (this.signature != 0x05054b50) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid digital signature signature: ' + this.signature);
+			throw withErrno('EINVAL', 'Invalid digital signature signature: ' + this.signature);
 		}
 	}
 
-	@t.uint32 public signature!: number;
+	@t.uint16 public accessor size!: number;
 
-	@t.uint16 public size!: number;
+	public signatureData!: Uint8Array;
 
-	public get signatureData(): ArrayBufferLike {
-		return this.data.slice(6, 6 + this.size);
+	static async from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<DigitalSignature<TBuffer>> {
+		const data = await source.get(offset, DigitalSignature.size);
+		const ds = new DigitalSignature<TBuffer>(data.buffer, data.byteOffset);
+		ds._source = source;
+		offset += DigitalSignature.size;
+		ds.signatureData = await source.get(offset, ds.size);
+		return ds;
 	}
 }
 
 /**
  * Overall ZIP file header.
- * Also call "end of central directory record"
+ * Also called "end of central directory record"
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-@struct()
-export class Header {
-	public constructor(protected data: ArrayBufferLike) {
-		deserialize(this, data as ArrayBuffer);
+@struct.packed('Header')
+export class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $from.typed(Uint8Array)<TBuffer> {
+	/** @internal @hidden */
+	_source!: ZipDataSource<TBuffer>;
+
+	@t.uint32 public accessor signature!: number;
+
+	public check() {
 		if (this.signature != 0x06054b50) {
-			throw new ErrnoError(Errno.EINVAL, 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));
+			throw withErrno('EINVAL', 'Invalid Zip file: End of central directory record has invalid signature: 0x' + this.signature.toString(16));
 		}
 	}
-
-	@t.uint32 public signature!: number;
 
 	/**
 	 * The number of this disk
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.19
 	 */
-	@t.uint16 public disk!: number;
+	@t.uint16 public accessor disk!: number;
 
 	/**
 	 * The number of the disk with the start of the entries
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.20
 	 */
-	@t.uint16 public entriesDisk!: number;
+	@t.uint16 public accessor entriesDisk!: number;
 
 	/**
 	 * Total number of entries on this disk
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.21
 	 */
-	@t.uint16 public diskEntryCount!: number;
+	@t.uint16 public accessor diskEntryCount!: number;
 
 	/**
 	 * Total number of entries
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.22
 	 */
-	@t.uint16 public totalEntryCount!: number;
+	@t.uint16 public accessor totalEntryCount!: number;
 
 	/**
 	 * Size of the "central directory"
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.23
 	 */
-	@t.uint32 public size!: number;
+	@t.uint32 public accessor size!: number;
 
 	/**
 	 * Offset of start of "central directory" with respect to the starting disk number
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.24
 	 */
-	@t.uint32 public offset!: number;
+	@t.uint32 public accessor offset!: number;
 
 	/**
 	 * Comment length
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.25
 	 */
-	@t.uint16 public commentLength!: number;
+	@t.uint16 public accessor commentLength!: number;
 
 	/**
 	 * Assuming the content is UTF-8 encoded. The specification doesn't specify.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.26
 	 */
-	public get comment(): string {
-		return safeDecode(this.data, true, 22, this.commentLength);
+	comment!: string;
+}
+
+/**
+ * Locates the end of central directory record at the end of the file.
+ * Throws an exception if it cannot be found.
+ *
+ * @remarks
+ * Unfortunately, the comment is variable size and up to 64K in size.
+ * We assume that the magic signature does not appear in the comment,
+ * and in the bytes between the comment and the signature.
+ * Other ZIP implementations make this same assumption,
+ * since the alternative is to read thread every entry in the file.
+ *
+ * Offsets in this function are negative (i.e. from the end of the file).
+ *
+ * There is no byte alignment on the comment
+ */
+export async function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<T>): Promise<Header<T>> {
+	for (let offset = source.size - 22; offset > source.size - 0xffff; offset--) {
+		const data = await source.get(offset, 22);
+		const sig = (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)) >>> 0;
+		// The magic number is the EOCD Signature
+		if (sig === 0x6054b50) {
+			log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
+			const header = new Header<T>(data.buffer, data.byteOffset);
+			header._source = source;
+			header.comment = await safeDecode(source, true, offset + Header.size, header.commentLength);
+			return header;
+		}
 	}
+	throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));
 }
