@@ -25,7 +25,7 @@ The easiest way to get started is by looking at these examples
 
 ```js
 import { configure, fs } from '@zenfs/core';
-import { Zip } from '@zenfs/archives';
+import { Zip } from '@lvcabral/zip';
 
 const res = await fetch('http://example.com/archive.zip');
 
