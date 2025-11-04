@@ -1,3 +1,4 @@
+import type { ZipDataSource } from './fs.js';
 /**
  * Converts the input `time` and `date` in MS-DOS format into a `Date`.
  *
@@ -20,4 +21,4 @@ export declare const extendedASCIIChars: string[];
  * Safely decodes the string from a buffer.
  * @hidden
  */
-export declare function safeDecode(buffer: ArrayBufferLike | ArrayBufferView, utf8: boolean, start: number, length: number): string;
+export declare function safeDecode(source: ZipDataSource<any>, utf8: boolean, start: number, length: number): Promise<string>;

@@ -1,5 +1,5 @@
-import { Stats } from '@zenfs/core/stats.js';
 import { CompressionMethod } from './compression.js';
+import type { ZipDataSource } from './fs.js';
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
  */
@@ -25,31 +25,32 @@ export declare enum AttributeCompat {
     OS_400 = 18,
     OSX = 19
 }
+declare const LocalFileHeader_base: import("memium/decorators").StructFromTypedArray<Uint8Array<ArrayBuffer>>;
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.7
  */
-export declare class LocalFileHeader {
-    protected data: ArrayBufferLike;
-    constructor(data: ArrayBufferLike);
-    signature: number;
+export declare class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> extends LocalFileHeader_base<TBuffer> {
+    _source: ZipDataSource<TBuffer>;
+    accessor signature: number;
+    check(): void;
     /**
      * The minimum supported ZIP specification version needed to extract the file.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.3
      */
-    versionNeeded: number;
+    accessor versionNeeded: number;
     /**
      * General purpose bit flags
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.4
      */
-    flags: number;
+    accessor flags: number;
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5
      */
-    compressionMethod: CompressionMethod;
+    accessor compressionMethod: CompressionMethod;
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
      */
-    protected datetime: number;
+    protected accessor datetime: number;
     /**
      * The date and time are encoded in standard MS-DOS format.
      * This getter decodes the date.
@@ -59,107 +60,107 @@ export declare class LocalFileHeader {
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.7
      */
-    crc32: number;
+    accessor crc32: number;
     /**
      * The size of the file compressed.
      * If bit 3 of the general purpose bit flag is set, set to zero.
      * central directory's entry is used
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.8
      */
-    compressedSize: number;
+    accessor compressedSize: number;
     /**
      * The size of the file uncompressed
      * If bit 3 of the general purpose bit flag is set, set to zero.
      * central directory's entry is used
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.9
      */
-    uncompressedSize: number;
+    accessor uncompressedSize: number;
     /**
      * The length of the file name
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.10
      */
-    nameLength: number;
+    accessor nameLength: number;
     /**
      * The length of the extra field
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.11
      */
-    extraLength: number;
+    accessor extraLength: number;
     /**
      * The name of the file, with optional relative path.
      * @see CentralDirectory.fileName
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
      */
-    get name(): string;
+    name: string;
     /**
      * This should be used for storage expansion.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
      */
-    get extra(): ArrayBuffer;
+    extra: Uint8Array;
     get size(): number;
     get useUTF8(): boolean;
+    static from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<LocalFileHeader<TBuffer>>;
 }
+declare const ExtraDataRecord_base: import("memium/decorators").StructFromTypedArray<Uint8Array<ArrayBuffer>>;
 /**
  * Archive extra data record
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.11
  */
-export declare class ExtraDataRecord {
-    readonly data: ArrayBufferLike;
-    signature: number;
-    length: number;
-    constructor(data: ArrayBufferLike);
+export declare class ExtraDataRecord<TBuffer extends ArrayBufferLike = ArrayBuffer> extends ExtraDataRecord_base<TBuffer> {
+    /** @internal @hidden */
+    _source: ZipDataSource<TBuffer>;
+    accessor signature: number;
+    check(): void;
+    accessor length: number;
     /**
      * This should be used for storage expansion.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
      */
-    get extraField(): ArrayBuffer;
+    extraField: Uint8Array;
+    static from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<ExtraDataRecord<TBuffer>>;
 }
+declare const FileEntry_base: import("memium/decorators").StructFromTypedArray<Uint8Array<ArrayBuffer>>;
 /**
- * @hidden
- * Inlined for performance
- */
-export declare const sizeof_FileEntry = 46;
-/**
- * Refered to as a "central directory" record in the spec.
+ * Referred to as a "central directory" record in the spec.
  * This is a file metadata entry inside the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.12
  */
-export declare class FileEntry {
-    protected zipData: ArrayBufferLike;
-    protected _data: ArrayBufferLike;
-    constructor(zipData: ArrayBufferLike, _data: ArrayBufferLike);
-    signature: number;
+export declare class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends FileEntry_base<TBuffer> {
+    /** @internal @hidden */
+    _source: ZipDataSource<TBuffer>;
+    accessor signature: number;
+    check(): void;
     /**
      * The lower byte of "version made by", indicates the ZIP specification version supported by the software used to encode the file.
      * major — floor `zipVersion` / 10
      * minor — `zipVersion` mod 10
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2
      */
-    zipVersion: number;
+    accessor zipVersion: number;
     /**
      * The upper byte of "version made by", indicates the compatibility of the file attribute information.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2
      */
-    attributeCompat: AttributeCompat;
+    accessor attributeCompat: AttributeCompat;
     /**
      * The minimum supported ZIP specification version needed to extract the file.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.3
      */
-    versionNeeded: number;
+    accessor versionNeeded: number;
     /**
      * General purpose bit flags
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.4
      */
-    flag: number;
+    accessor flag: number;
     get useUTF8(): boolean;
     get isEncrypted(): boolean;
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.5
      */
-    compressionMethod: CompressionMethod;
+    accessor compressionMethod: CompressionMethod;
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.6
      */
-    protected datetime: number;
+    protected accessor datetime: number;
     /**
      * The date and time are encoded in standard MS-DOS format.
      * This getter decodes the date.
@@ -169,41 +170,41 @@ export declare class FileEntry {
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.7
      */
-    crc32: number;
+    accessor crc32: number;
     /**
      * The size of the file compressed
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.8
      */
-    compressedSize: number;
+    accessor compressedSize: number;
     /**
      * The size of the file uncompressed
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.9
      */
-    uncompressedSize: number;
+    accessor uncompressedSize: number;
     /**
      * The length of the file name
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.10
      */
-    nameLength: number;
+    accessor nameLength: number;
     /**
      * The length of the extra field
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.11
      */
-    extraLength: number;
+    accessor extraLength: number;
     /**
      * The length of the comment
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.12
      */
-    commentLength: number;
+    accessor commentLength: number;
     /**
      * The number of the disk on which this file begins.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.13
      */
-    startDisk: number;
+    accessor startDisk: number;
     /**
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.14
      */
-    internalAttributes: number;
+    accessor internalAttributes: number;
     /**
      * The mapping of the external attributes is host-system dependent.
      * For MS-DOS, the low order byte is the MS-DOS directory attribute byte.
@@ -211,13 +212,13 @@ export declare class FileEntry {
      * @see attributeCompat
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.15
      */
-    externalAttributes: number;
+    accessor externalAttributes: number;
     /**
      * This is the offset from the start of the first disk on which
      * this file appears to where the local header should be found.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.16
      */
-    headerRelativeOffset: number;
+    accessor headerRelativeOffset: number;
     /**
      * The name of the file, with optional relative path.
      * The filename is preloaded here, since looking it up is expensive.
@@ -230,20 +231,20 @@ export declare class FileEntry {
      *
      * Unfortunately, this isn't true in practice.
      * Some Windows zip utilities use a backslash here, but the correct Unix-style path in file headers.
-     * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '/' to '\' here.
+     * To avoid seeking all over the file to recover the known-good filenames from file headers, we simply convert '\' to '/' here.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.17
      */
-    readonly name: string;
+    name: string;
     /**
      * This should be used for storage expansion.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.28
      */
-    get extra(): ArrayBuffer;
+    extra: Uint8Array;
     /**
      * The comment for this file
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.18
      */
-    readonly comment: string;
+    comment: string;
     /**
      * The total size of the this entry
      */
@@ -256,72 +257,99 @@ export declare class FileEntry {
      * Whether this entry is a file
      */
     get isFile(): boolean;
+    loadContents(): Promise<void>;
     /**
      * Gets the file data, and decompresses it if needed.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
      */
+    contents: Uint8Array;
+    /**
+     * @deprecated Use `contents`
+     */
     get data(): Uint8Array;
-    get stats(): Stats;
+    static from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<FileEntry<TBuffer>>;
 }
+declare const DigitalSignature_base: import("memium/decorators").StructFromTypedArray<Uint8Array<ArrayBuffer>>;
 /**
  * Digital signature
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.13
  */
-export declare class DigitalSignature {
-    protected data: ArrayBufferLike;
-    constructor(data: ArrayBufferLike);
-    signature: number;
-    size: number;
-    get signatureData(): ArrayBuffer;
+export declare class DigitalSignature<TBuffer extends ArrayBufferLike = ArrayBuffer> extends DigitalSignature_base<TBuffer> {
+    /** @internal @hidden */
+    _source: ZipDataSource<TBuffer>;
+    accessor signature: number;
+    check(): void;
+    accessor size: number;
+    signatureData: Uint8Array;
+    static from<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): Promise<DigitalSignature<TBuffer>>;
 }
+declare const Header_base: import("memium/decorators").StructFromTypedArray<Uint8Array<ArrayBuffer>>;
 /**
  * Overall ZIP file header.
- * Also call "end of central directory record"
+ * Also called "end of central directory record"
  * Internally, ZIP files have only a single directory: the "central directory".
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.16
  */
-export declare class Header {
-    protected data: ArrayBufferLike;
-    constructor(data: ArrayBufferLike);
-    signature: number;
+export declare class Header<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Header_base<TBuffer> {
+    /** @internal @hidden */
+    _source: ZipDataSource<TBuffer>;
+    accessor signature: number;
+    check(): void;
     /**
      * The number of this disk
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.19
      */
-    disk: number;
+    accessor disk: number;
     /**
      * The number of the disk with the start of the entries
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.20
      */
-    entriesDisk: number;
+    accessor entriesDisk: number;
     /**
      * Total number of entries on this disk
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.21
      */
-    diskEntryCount: number;
+    accessor diskEntryCount: number;
     /**
      * Total number of entries
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.22
      */
-    totalEntryCount: number;
+    accessor totalEntryCount: number;
     /**
      * Size of the "central directory"
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.23
      */
-    size: number;
+    accessor size: number;
     /**
      * Offset of start of "central directory" with respect to the starting disk number
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.24
      */
-    offset: number;
+    accessor offset: number;
     /**
      * Comment length
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.25
      */
-    commentLength: number;
+    accessor commentLength: number;
     /**
      * Assuming the content is UTF-8 encoded. The specification doesn't specify.
      * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.26
      */
-    get comment(): string;
+    comment: string;
 }
+/**
+ * Locates the end of central directory record at the end of the file.
+ * Throws an exception if it cannot be found.
+ *
+ * @remarks
+ * Unfortunately, the comment is variable size and up to 64K in size.
+ * We assume that the magic signature does not appear in the comment,
+ * and in the bytes between the comment and the signature.
+ * Other ZIP implementations make this same assumption,
+ * since the alternative is to read thread every entry in the file.
+ *
+ * Offsets in this function are negative (i.e. from the end of the file).
+ *
+ * There is no byte alignment on the comment
+ */
+export declare function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<T>): Promise<Header<T>>;
+export {};

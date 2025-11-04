@@ -1,4 +1,5 @@
-import { decodeUTF8 } from '@zenfs/core/utils.js';
+// SPDX-License-Identifier: LGPL-3.0-or-later
+import { decodeUTF8 } from 'utilium';
 /**
  * Converts the input `time` and `date` in MS-DOS format into a `Date`.
  *
@@ -158,11 +159,11 @@ export const extendedASCIIChars = [
  * Safely decodes the string from a buffer.
  * @hidden
  */
-export function safeDecode(buffer, utf8, start, length) {
+export async function safeDecode(source, utf8, start, length) {
     if (length === 0) {
         return '';
     }
-    const uintArray = new Uint8Array('buffer' in buffer ? buffer.buffer : buffer).slice(start, start + length);
+    const uintArray = await source.get(start, length);
     if (utf8) {
         return decodeUTF8(uintArray);
     }

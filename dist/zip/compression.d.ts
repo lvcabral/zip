@@ -19,7 +19,7 @@ export declare enum CompressionMethod {
     WAVPACK = 97,
     PPMD = 98
 }
-export type decompress = (data: ArrayBufferLike, compressedSize: number, uncompressedSize: number, flags: number) => Uint8Array;
+export type decompress = (data: Uint8Array, compressedSize: number, uncompressedSize: number, flags: number) => Uint8Array;
 /**
  * Maps CompressionMethod to function that decompresses.
  */
