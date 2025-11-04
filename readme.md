@@ -13,9 +13,6 @@ Please read the ZenFS core documentation!
 
 ## Installation
 
-> [!IMPORTANT]
-> This project is licensed under the LGPL (v3+).
-
 ```sh
 npm install @lvcabral/zip
 ```
