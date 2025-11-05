@@ -325,16 +325,7 @@ const _Zip = {
 	name: 'Zip',
 
 	options: {
-		data: {
-			type: [
-				ArrayBuffer,
-				Object.getPrototypeOf(Uint8Array) /* %TypedArray% */,
-				function ZipDataSource(v: unknown): v is ZipDataSource {
-					return typeof v == 'object' && v !== null && 'size' in v && typeof v.size == 'number' && 'get' in v && typeof v.get == 'function';
-				},
-			],
-			required: true,
-		},
+		data: { type: 'object', required: true },
 		name: { type: 'string', required: false },
 		lazy: { type: 'boolean', required: false },
 		caseFold: { type: 'string', required: false },

@@ -85,7 +85,7 @@ declare const _Zip: {
     name: string;
     options: {
         data: {
-            type: any[];
+            type: string;
             required: true;
         };
         name: {
