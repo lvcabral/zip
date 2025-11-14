@@ -1,15 +1,13 @@
 # ZenFS Zip Backend
 
-[ZenFS](https://github.com/zen-fs/core) backends for archive files.
-
-This package adds the Zip backend:
+[ZenFS](https://github.com/zen-fs/core) backend for Zip files:
 
 - `Zip` allows you to create a _readonly_ file system from a zip file.
 - This fork adds support for the `caseFold` mode option but keeps file names in their original case and still allows case-insensitive lookups.
 
 For more information, see the [API documentation](https://zenfs.dev/archives).
 
-Please read the ZenFS core documentation!
+Please read the ZenFS [core documentation](https://zenfs.dev/core/)!
 
 ## Installation
 
