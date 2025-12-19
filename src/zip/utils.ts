@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
+import { withErrno } from 'kerium';
 import { decodeUTF8 } from 'utilium';
 import type { ZipDataSource } from './fs.js';
 
@@ -160,19 +161,33 @@ export const extendedASCIIChars = [
 	' ',
 ];
 
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+	return typeof (value as PromiseLike<unknown>)?.then == 'function';
+}
+
+export function requireSync<T>(value: T | Promise<T>): T {
+	if (isPromiseLike(value)) throw withErrno('ENOTSUP', 'Zip data source requires synchronous access');
+	return value as T;
+}
+
+function decodeBuffer(uintArray: Uint8Array, utf8: boolean): string {
+	return utf8
+		? decodeUTF8(uintArray)
+		: [...uintArray].map(char => (char > 127 ? extendedASCIIChars[char - 128] : String.fromCharCode(char))).join('');
+}
+
 /**
  * Safely decodes the string from a buffer.
  * @hidden
  */
 export async function safeDecode(source: ZipDataSource<any>, utf8: boolean, start: number, length: number): Promise<string> {
-	if (length === 0) {
-		return '';
-	}
-
+	if (length === 0) return '';
 	const uintArray = await source.get(start, length);
-	if (utf8) {
-		return decodeUTF8(uintArray);
-	} else {
-		return [...uintArray].map(char => (char > 127 ? extendedASCIIChars[char - 128] : String.fromCharCode(char))).join('');
-	}
+	return decodeBuffer(uintArray, utf8);
+}
+
+export function safeDecodeSync(source: ZipDataSource<any>, utf8: boolean, start: number, length: number): string {
+	if (length === 0) return '';
+	const uintArray = requireSync(source.get(start, length));
+	return decodeBuffer(uintArray, utf8);
 }

@@ -1,5 +1,5 @@
 import tseslint from 'typescript-eslint';
-import shared from '@zenfs/core/eslint';
+import shared from '@lvcabral/zenfs/eslint';
 
 export default tseslint.config(...shared, {
 	files: ['src/**/*.ts', 'tests/**/*.ts'],

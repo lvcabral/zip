@@ -22,7 +22,7 @@ The easiest way to get started is by looking at these examples
 #### `Zip`
 
 ```js
-import { configure, fs } from '@zenfs/core';
+import { configure, fs } from '@lvcabral/zenfs';
 import { Zip } from '@lvcabral/zip';
 
 const res = await fetch('http://example.com/archive.zip');

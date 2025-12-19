@@ -1,7 +1,7 @@
 import { fromStream, Zip } from '@lvcabral/zip';
-import { configureSingle, fs } from '@zenfs/core';
+import { configureSingle, configureSingleSync, fs } from '@lvcabral/zenfs';
 // @ts-expect-error 7016
-import { setupLogs } from '@zenfs/core/tests/logs.js';
+import { setupLogs } from '@lvcabral/zenfs/tests/logs.js';
 import assert from 'node:assert/strict';
 import { fstatSync, readFileSync, readSync } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -36,6 +36,16 @@ suite('Basic ZIP operations', () => {
 		const buffer = readFileSync(import.meta.dirname + '/files/data.zip');
 		const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 		await configureSingle({ backend: Zip, data });
+	});
+
+	_runTests();
+});
+
+suite('Sync ZIP operations', () => {
+	test('Configure', () => {
+		const buffer = readFileSync(import.meta.dirname + '/files/data.zip');
+		const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+		configureSingleSync({ backend: Zip, data });
 	});
 
 	_runTests();

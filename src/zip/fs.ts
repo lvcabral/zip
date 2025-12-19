@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-import { FileSystem, Inode, type UsageInfo } from '@zenfs/core';
-import type { Backend } from '@zenfs/core/backends/backend.js';
-import type { CaseFold } from '@zenfs/core/internal/filesystem.js';
-import { S_IFDIR, S_IFREG } from '@zenfs/core/constants';
-import { Readonly } from '@zenfs/core/mixins/readonly.js';
-import { parse } from '@zenfs/core/path';
+import { FileSystem, Inode, type UsageInfo } from '@lvcabral/zenfs';
+import type { Backend } from '@lvcabral/zenfs/backends/backend.js';
+import type { CaseFold } from '@lvcabral/zenfs/internal/filesystem.js';
+import { S_IFDIR, S_IFREG } from '@lvcabral/zenfs/constants';
+import { Readonly } from '@lvcabral/zenfs/mixins/readonly.js';
+import { parse } from '@lvcabral/zenfs/path';
 import { withErrno } from 'kerium';
 import { err } from 'kerium/log';
 import { _throw } from 'utilium';
 import type { Header } from './zip.js';
-import { computeEOCD, FileEntry } from './zip.js';
+import { computeEOCD, computeEOCDSync, FileEntry } from './zip.js';
 
 export interface ZipDataSource<TBuffer extends ArrayBufferLike = ArrayBuffer> {
 	readonly size: number;
@@ -88,34 +88,64 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 		this._ready = true;
 
 		this.eocd = await computeEOCD(this.data);
-		if (this.eocd.disk != this.eocd.entriesDisk) {
-			throw withErrno('EINVAL', 'ZipFS does not support spanned zip files.');
-		}
+		this._assertSupportedArchive(this.eocd);
 
 		let ptr = this.eocd.offset;
-
-		if (ptr === 0xffffffff) {
-			throw withErrno('EINVAL', 'ZipFS does not support Zip64.');
-		}
 		const cdEnd = ptr + this.eocd.size;
 
 		while (ptr < cdEnd) {
 			const cd = await FileEntry.from<TBuffer>(this.data, ptr);
 
 			if (!this.lazy) await cd.loadContents();
-			/* 	Paths must be absolute,
-			yet zip file paths are always relative to the zip root.
-			So we prepend '/' and call it a day. */
-			if (cd.name.startsWith('/')) {
-				throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
-			}
-			// Strip the trailing '/' if it exists
-			const name = cd.name.endsWith('/') ? '/' + cd.name.slice(0, -1) : '/' + cd.name;
-			this.files.set(this._caseFold(name, true), cd);
+			this._registerEntry(cd);
 			ptr += cd.size;
 		}
 
-		// Parse directory entries
+		this._buildDirectoryIndex();
+	}
+
+	public readySync(): void {
+		if (this._ready) return;
+		this._ready = true;
+
+		this.eocd = computeEOCDSync(this.data);
+		this._assertSupportedArchive(this.eocd);
+
+		let ptr = this.eocd.offset;
+		const cdEnd = ptr + this.eocd.size;
+
+		while (ptr < cdEnd) {
+			const cd = FileEntry.fromSync<TBuffer>(this.data, ptr);
+
+			if (!this.lazy) cd.loadContentsSync();
+			this._registerEntry(cd);
+			ptr += cd.size;
+		}
+
+		this._buildDirectoryIndex();
+	}
+
+	private _assertSupportedArchive(header: Header<TBuffer>): void {
+		if (header.disk != header.entriesDisk) {
+			throw withErrno('EINVAL', 'ZipFS does not support spanned zip files.');
+		}
+		if (header.offset === 0xffffffff) {
+			throw withErrno('EINVAL', 'ZipFS does not support Zip64.');
+		}
+	}
+
+	private _registerEntry(entry: FileEntry<TBuffer>): void {
+		if (entry.name.startsWith('/')) {
+			throw withErrno('EPERM', 'Unexpectedly encountered an absolute path in a zip file.');
+		}
+
+		const name = entry.name.endsWith('/') ? '/' + entry.name.slice(0, -1) : '/' + entry.name;
+		this.files.set(this._caseFold(name, true), entry);
+	}
+
+	private _buildDirectoryIndex(): void {
+		this.directories.clear();
+
 		for (const entry of this.files.keys()) {
 			const name = this.folded.get(entry) ?? entry;
 			let { dir, base } = parse(name);
@@ -128,8 +158,7 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 			this.directories.get(dir)!.add(base);
 		}
 
-		// Add subdirectories to their parent's entries
-		for (const entry of this.directories.keys()) {
+		for (const entry of Array.from(this.directories.keys())) {
 			const name = this.folded.get(entry) ?? entry;
 			let { dir, base } = parse(name);
 
@@ -328,7 +357,6 @@ const _Zip = {
 		data: { type: 'object', required: true },
 		name: { type: 'string', required: false },
 		lazy: { type: 'boolean', required: false },
-		caseFold: { type: 'string', required: false },
 	},
 
 	isAvailable(): boolean {

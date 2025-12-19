@@ -1,4 +1,4 @@
-import { configureSingle, InMemory, CopyOnWrite } from '@zenfs/core';
+import { configureSingle, InMemory, CopyOnWrite } from '@lvcabral/zenfs';
 import { readFileSync } from 'node:fs';
 import { Zip } from '../dist/zip/fs.js';
 

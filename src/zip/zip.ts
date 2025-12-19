@@ -4,7 +4,7 @@ import { sizeof } from 'memium';
 import { $from, struct, types as t } from 'memium/decorators';
 import { CompressionMethod, decompressionMethods } from './compression.js';
 import type { ZipDataSource } from './fs.js';
-import { msdosDate, safeDecode } from './utils.js';
+import { msdosDate, requireSync, safeDecode, safeDecodeSync } from './utils.js';
 
 /**
  * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.4.2.2
@@ -143,6 +143,7 @@ export class LocalFileHeader<TBuffer extends ArrayBufferLike = ArrayBuffer> exte
 		offset += cd.extraLength;
 		return cd;
 	}
+
 }
 
 /**
@@ -385,6 +386,18 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 		this.contents = decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
 	}
 
+	loadContentsSync(): void {
+		const rawLocalHeader = requireSync(this._source.get(this.headerRelativeOffset, sizeof(LocalFileHeader)));
+		const { compressionMethod, size, name } = new LocalFileHeader(rawLocalHeader.buffer, rawLocalHeader.byteOffset);
+		const data = requireSync(this._source.get(this.headerRelativeOffset + size, this.compressedSize));
+		const decompress = decompressionMethods[compressionMethod];
+		if (typeof decompress != 'function') {
+			const mname: string = compressionMethod in CompressionMethod ? CompressionMethod[compressionMethod] : compressionMethod.toString();
+			throw withErrno('EINVAL', `Invalid compression method on file "${name}": ${mname}`);
+		}
+		this.contents = decompress(data, this.compressedSize, this.uncompressedSize, this.flag);
+	}
+
 	/**
 	 * Gets the file data, and decompresses it if needed.
 	 * @see http://pkware.com/documents/casestudies/APPNOTE.TXT#:~:text=4.3.8
@@ -408,6 +421,19 @@ export class FileEntry<TBuffer extends ArrayBufferLike = ArrayBuffer> extends $f
 		cd.extra = await source.get(offset, cd.extraLength);
 		offset += cd.extraLength;
 		cd.comment = await safeDecode(source, cd.useUTF8, offset, cd.commentLength);
+		return cd;
+	}
+
+	static fromSync<TBuffer extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<TBuffer>, offset: number): FileEntry<TBuffer> {
+		const entryData = requireSync(source.get(offset, FileEntry.size));
+		const cd = new FileEntry<TBuffer>(entryData.buffer, entryData.byteOffset);
+		cd._source = source;
+		offset += FileEntry.size;
+		cd.name = safeDecodeSync(source, cd.useUTF8, offset, cd.nameLength);
+		offset += cd.nameLength;
+		cd.extra = requireSync(source.get(offset, cd.extraLength));
+		offset += cd.extraLength;
+		cd.comment = safeDecodeSync(source, cd.useUTF8, offset, cd.commentLength);
 		return cd;
 	}
 }
@@ -541,3 +567,19 @@ export async function computeEOCD<T extends ArrayBufferLike = ArrayBuffer>(sourc
 	}
 	throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));
 }
+
+	export function computeEOCDSync<T extends ArrayBufferLike = ArrayBuffer>(source: ZipDataSource<T>): Header<T> {
+		for (let offset = source.size - 22; offset > source.size - 0xffff; offset--) {
+			const data = requireSync(source.get(offset, 22));
+			const sig = (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24)) >>> 0;
+			if (sig === 0x6054b50) {
+				log.debug('zipfs: found End of Central Directory signature at 0x' + offset.toString(16));
+				const header = new Header<T>(data.buffer, data.byteOffset);
+				header._source = source;
+				header.comment = safeDecodeSync(source, true, offset + Header.size, header.commentLength);
+				return header;
+			}
+		}
+
+		throw log.err(withErrno('EINVAL', 'zipfs: could not locate End of Central Directory signature'));
+	}
