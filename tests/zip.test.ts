@@ -111,3 +111,14 @@ await suite('Custom data source', () => {
 
 	_runTests();
 });
+
+await suite('Regression: common.zip root listing', () => {
+	test('readdirSync returns all top-level directories', () => {
+		const buffer = readFileSync(import.meta.dirname + '/files/common.zip');
+		const data = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+		configureSingleSync({ backend: Zip, data });
+		const expected = ['audio', 'certs', 'fonts', 'roku_ads', 'roku_analytics', 'roku_browser', 'LibCore', 'images', 'locale'];
+		const actual = [...fs.readdirSync('/')].sort();
+		assert.deepEqual(actual, [...expected].sort());
+	});
+});

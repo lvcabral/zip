@@ -148,28 +148,20 @@ export class ZipFS<TBuffer extends ArrayBufferLike = ArrayBuffer> extends Readon
 
 		for (const entry of this.files.keys()) {
 			const name = this.folded.get(entry) ?? entry;
-			let { dir, base } = parse(name);
+			let current = name;
 
-			dir = this._caseFold(dir, true);
-			if (!this.directories.has(dir)) {
-				this.directories.set(dir, new Set());
+			while (true) {
+				const { dir, base } = parse(current);
+				if (base == '') break;
+
+				const foldedDir = this._caseFold(dir, true);
+				if (!this.directories.has(foldedDir)) {
+					this.directories.set(foldedDir, new Set());
+				}
+
+				this.directories.get(foldedDir)!.add(base);
+				current = dir;
 			}
-
-			this.directories.get(dir)!.add(base);
-		}
-
-		for (const entry of Array.from(this.directories.keys())) {
-			const name = this.folded.get(entry) ?? entry;
-			let { dir, base } = parse(name);
-
-			dir = this._caseFold(dir, true);
-			if (base == '') continue;
-
-			if (!this.directories.has(dir)) {
-				this.directories.set(dir, new Set());
-			}
-
-			this.directories.get(dir)!.add(base);
 		}
 	}
 
